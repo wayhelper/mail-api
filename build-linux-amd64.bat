@@ -13,7 +13,7 @@ echo 正在开始编译 Linux (AMD64) 版本...
 go build -ldflags="-s -w" -o mail-api-linux-amd64 main.go
 
 if %errorlevel% equ 0 (
-    echo [成功] 编译完成！生成文件: gmail 
+    echo [成功] 编译完成！生成文件: mail-api-linux-amd64
 ) else (
     echo [失败] 编译过程中出现错误。
 )
