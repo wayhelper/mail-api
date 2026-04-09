@@ -1,0 +1,164 @@
+package main
+
+import (
+	"log"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+
+	"github.com/gin-gonic/gin"
+	"gopkg.in/gomail.v2"
+)
+
+// 封装配置结构体
+type EmailAccount struct {
+	User string
+	Pass string
+}
+
+type Config struct {
+	SmtpHost    string
+	SmtpPort    int
+	Accounts    []EmailAccount // 支持多个账号
+	ValidAppKey string
+}
+type RoundRobin struct {
+	mu       sync.Mutex
+	accounts []EmailAccount
+	index    int
+}
+
+// NewRoundRobin 创建轮询器
+func NewRoundRobin(accounts []EmailAccount) *RoundRobin {
+	if len(accounts) == 0 {
+		return nil
+	}
+	return &RoundRobin{
+		accounts: accounts,
+		index:    0,
+	}
+}
+
+// Next 返回下一个账号（线程安全）
+func (r *RoundRobin) Next() EmailAccount {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	acc := r.accounts[r.index]
+	r.index = (r.index + 1) % len(r.accounts)
+	return acc
+}
+
+// 示例：ACCOUNTS="user1:pass1,user2:pass2,user3:pass3"
+func loadAccountsFromEnv(envKey string) []EmailAccount {
+	accountsStr := getEnv(envKey, "")
+	if accountsStr == "" {
+		return nil
+	}
+	parts := strings.Split(accountsStr, ",")
+	var accounts []EmailAccount
+	for _, part := range parts {
+		cred := strings.SplitN(part, ":", 2)
+		if len(cred) == 2 {
+			accounts = append(accounts, EmailAccount{
+				User: strings.TrimSpace(cred[0]),
+				Pass: strings.TrimSpace(cred[1]),
+			})
+		}
+	}
+	return accounts
+}
+
+func loadConfig() Config {
+	port, _ := strconv.Atoi(getEnv("SMTP_PORT", "465"))
+	// 加载账号数组（这里以方式A为例）
+	accounts := loadAccountsFromEnv("SMTP_ACCOUNTS")
+	if len(accounts) == 0 {
+		log.Println("警告：未配置 SMTP_ACCOUNTS，请至少设置一个账号")
+	}
+	return Config{
+		SmtpHost:    getEnv("SMTP_HOST", "smtp.qq.com"),
+		SmtpPort:    port,
+		Accounts:    accounts,
+		ValidAppKey: getEnv("APP_KEY", ""),
+	}
+}
+
+// 辅助函数：获取环境变量，不存在则返回默认值
+func getEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
+}
+
+type EmailRequest struct {
+	To      string `json:"to" binding:"required,email"`
+	Subject string `json:"subject" binding:"required"`
+	Body    string `json:"body" binding:"required"`
+}
+
+func main() {
+	config := loadConfig()
+
+	if len(config.Accounts) == 0 || config.ValidAppKey == "" {
+		log.Fatal("错误：必须配置 SMTP_ACCOUNTS 和 APP_KEY")
+	}
+
+	// 创建轮询器
+	rr := NewRoundRobin(config.Accounts)
+
+	r := gin.Default()
+
+	r.POST("/api/send", func(c *gin.Context) {
+		// 校验 AppKey 不变
+		if c.GetHeader("appKey") != config.ValidAppKey {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权：AppKey 无效"})
+			return
+		}
+
+		var req EmailRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
+			return
+		}
+
+		// 尝试发送邮件（带重试机制，最多尝试所有账号）
+		var lastErr error
+		for retry := 0; retry < len(config.Accounts); retry++ {
+			acc := rr.Next() // 轮询获取账号
+			err := sendEmail(config.SmtpHost, config.SmtpPort, acc.User, acc.Pass, req.To, req.Subject, req.Body)
+			if err == nil {
+				c.JSON(http.StatusOK, gin.H{"message": "邮件发送成功！"})
+				return
+			}
+			lastErr = err
+			log.Printf("使用账号 %s 发送失败: %v，尝试下一个账号", acc.User, err)
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "所有账号均发送失败: " + lastErr.Error()})
+	})
+
+	r.Run(":5010")
+}
+
+// 将发送逻辑抽成独立函数
+func sendEmail(host string, port int, user, pass, to, subject, body string) error {
+	m := gomail.NewMessage()
+	m.SetHeader("From", user)
+	m.SetHeader("To", to)
+	m.SetHeader("Subject", subject)
+	m.SetBody("text/html", body)
+
+	d := gomail.NewDialer(host, port, user, pass)
+	return d.DialAndSend(m)
+}
+
+/*
+# 方式A：单个环境变量
+export SMTP_ACCOUNTS="sender1@qq.com:pass123,sender2@163.com:pass456"
+export SMTP_HOST="smtp.qq.com"
+export SMTP_PORT="465"
+export APP_KEY="your-secret-key"
+*/
