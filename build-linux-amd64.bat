@@ -10,7 +10,7 @@ set CGO_ENABLED=0
 echo 正在开始编译 Linux (AMD64) 版本...
 
 :: 4. 执行编译指令，输出文件名为gmail 
-go build -ldflags="-s -w" -o mail-api main.go
+go build -ldflags="-s -w" -o mail-api-linux-amd64 main.go
 
 if %errorlevel% equ 0 (
     echo [成功] 编译完成！生成文件: gmail 
