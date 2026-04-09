@@ -12,7 +12,6 @@ import (
 	"gopkg.in/gomail.v2"
 )
 
-// 封装配置结构体
 type EmailAccount struct {
 	User string
 	Pass string
@@ -50,7 +49,6 @@ func (r *RoundRobin) Next() EmailAccount {
 	return acc
 }
 
-// 示例：ACCOUNTS="user1:pass1,user2:pass2,user3:pass3"
 func loadAccountsFromEnv(envKey string) []EmailAccount {
 	accountsStr := getEnv(envKey, "")
 	if accountsStr == "" {
@@ -85,7 +83,6 @@ func loadConfig() Config {
 	}
 }
 
-// 辅助函数：获取环境变量，不存在则返回默认值
 func getEnv(key, fallback string) string {
 	if value, ok := os.LookupEnv(key); ok {
 		return value
@@ -106,13 +103,12 @@ func main() {
 		log.Fatal("错误：必须配置 SMTP_ACCOUNTS 和 APP_KEY")
 	}
 
-	// 创建轮询器
 	rr := NewRoundRobin(config.Accounts)
 
 	r := gin.Default()
 
 	r.POST("/api/send", func(c *gin.Context) {
-		// 校验 AppKey 不变
+
 		if c.GetHeader("appKey") != config.ValidAppKey {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权：AppKey 无效"})
 			return
@@ -143,7 +139,6 @@ func main() {
 	r.Run(":5010")
 }
 
-// 将发送逻辑抽成独立函数
 func sendEmail(host string, port int, user, pass, to, subject, body string) error {
 	m := gomail.NewMessage()
 	m.SetHeader("From", user)
@@ -154,11 +149,3 @@ func sendEmail(host string, port int, user, pass, to, subject, body string) erro
 	d := gomail.NewDialer(host, port, user, pass)
 	return d.DialAndSend(m)
 }
-
-/*
-# 方式A：单个环境变量
-export SMTP_ACCOUNTS="sender1@qq.com:pass123,sender2@163.com:pass456"
-export SMTP_HOST="smtp.qq.com"
-export SMTP_PORT="465"
-export APP_KEY="your-secret-key"
-*/
