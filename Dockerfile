@@ -1,17 +1,24 @@
 FROM golang:1.21-alpine
 
-# 设置 Go 代理（解决网络问题）
-ENV GO111MODULE=on \
-    GOPROXY=https://goproxy.cn,direct
-
 WORKDIR /app
 
-# 复制所有文件
+# 安装编译依赖（关键）
+RUN apk add --no-cache git build-base
+
+# 设置代理
+ENV GO111MODULE=on \
+    GOPROXY=https://goproxy.cn,direct \
+    CGO_ENABLED=0
+
+# 先复制依赖文件（缓存优化 + 防炸）
+COPY go.mod go.sum ./
+RUN go mod download
+
+# 再复制源码
 COPY . .
 
-# 下载依赖并编译
-RUN go mod download && \
-    go build -ldflags="-w -s" -o mail-api .
+# 编译
+RUN go build -v -ldflags="-w -s" -o mail-api .
 
 EXPOSE 5010
 
