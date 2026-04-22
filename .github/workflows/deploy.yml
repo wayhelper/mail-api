@@ -26,4 +26,4 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/mail-api:latest
-            ${{ secrets.DOCKER_USERNAME }}/mail-api:${{ github.sha }}
+            ${{ secrets.DOCKER_USERNAME }}/mail-api:v1.0.0
