@@ -136,7 +136,10 @@ func main() {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "所有账号均发送失败: " + lastErr.Error()})
 	})
 
-	r.Run(":5010")
+	err := r.Run(":5010")
+	if err != nil {
+		return
+	}
 }
 
 func sendEmail(host string, port int, user, pass, to, subject, body string) error {
