@@ -1,14 +1,13 @@
-FROM golang:1.21-alpine
+FROM golang:1.25.5-alpine
 
 WORKDIR /app
 
 # 安装编译依赖（关键）
 RUN apk add --no-cache git build-base
 
-# 设置代理
 ENV GO111MODULE=on \
     GOPROXY=https://goproxy.cn,direct \
-    CGO_ENABLED=0
+    GOTOOLCHAIN=auto
 
 # 先复制依赖文件（缓存优化 + 防炸）
 COPY go.mod go.sum ./
