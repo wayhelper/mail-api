@@ -10,9 +10,7 @@ RUN apk add --no-cache git build-base
 # 设置 Go 环境变量
 ENV GO111MODULE=on \
     GOPROXY=https://goproxy.cn,direct \
-    CGO_ENABLED=0 \      # 关键：禁用 CGO，生成静态二进制文件
-    GOOS=linux \         # 可选：指定目标操作系统
-    GOARCH=amd64         # 可选：指定目标架构
+    GOTOOLCHAIN=auto
 
 # 复制依赖文件并下载（利用 Docker 缓存）
 COPY go.mod go.sum ./
